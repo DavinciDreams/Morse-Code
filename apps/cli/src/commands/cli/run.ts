@@ -286,7 +286,17 @@ export async function run(promptArg: string | undefined, flagOptions: FlagOption
 	extensionHostOptions.apiKey =
 		extensionHostOptions.apiKey || flagOptions.apiKey || getApiKeyFromEnv(extensionHostOptions.provider)
 
-	// For Anthropic with no API key, fall back to stored OAuth token (Claude Code Max).
+	// For Anthropic, ANTHROPIC_AUTH_TOKEN env var carries an OAuth Bearer token (Claude Code Max).
+	// Check it before falling back to stored credentials so a shell-profile export works everywhere.
+	if (extensionHostOptions.provider === "anthropic" && !extensionHostOptions.apiKey) {
+		const envAuthToken = process.env.ANTHROPIC_AUTH_TOKEN
+		if (envAuthToken) {
+			extensionHostOptions.apiKey = envAuthToken
+			extensionHostOptions.anthropicUseAuthToken = true
+		}
+	}
+
+	// If still no key, fall back to stored OAuth credentials from `roo auth anthropic login`.
 	if (extensionHostOptions.provider === "anthropic" && !extensionHostOptions.apiKey) {
 		const { getValidAnthropicToken } = await import("@/lib/auth/anthropic-oauth.js")
 		const oauthToken = await getValidAnthropicToken()

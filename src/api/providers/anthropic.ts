@@ -37,11 +37,16 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		super()
 		this.options = options
 
-		const apiKeyFieldName = this.options.anthropicUseAuthToken ? "authToken" : "apiKey"
+		// Prefer ANTHROPIC_AUTH_TOKEN env var over ANTHROPIC_API_KEY when no explicit
+		// key is configured — lets Claude Code Max OAuth work without storing a key.
+		const envAuthToken = !this.options.apiKey ? process.env.ANTHROPIC_AUTH_TOKEN : undefined
+		const useAuthToken = this.options.anthropicUseAuthToken || Boolean(envAuthToken)
+		const apiKeyFieldName = useAuthToken ? "authToken" : "apiKey"
+		const apiKeyValue = this.options.apiKey || envAuthToken
 
 		this.client = new Anthropic({
 			baseURL: this.options.anthropicBaseUrl || undefined,
-			[apiKeyFieldName]: this.options.apiKey,
+			[apiKeyFieldName]: apiKeyValue,
 		})
 	}
 
