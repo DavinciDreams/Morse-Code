@@ -304,6 +304,14 @@ export async function activate(context: vscode.ExtensionContext) {
 	// Check for worktree auto-open path (set when switching to a worktree)
 	await checkWorktreeAutoOpen(context, outputChannel)
 
+	// Scan for orphaned worktrees from previous sessions (e.g. after a crash).
+	// Run in background so it doesn't delay activation.
+	void provider.detectAndCleanOrphanedWorktrees().catch((err) => {
+		outputChannel.appendLine(
+			`[OrphanWorktree] Startup scan failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+		)
+	})
+
 	// Auto-import configuration if specified in settings.
 	try {
 		await autoImportSettings(outputChannel, {

@@ -35,6 +35,7 @@ export const historyItemSchema = z.object({
 				message: z.string(),
 				worktree: z.string().optional(),
 				todos: z.string().optional(),
+				abortOnFailure: z.boolean().optional(), // If true, remaining queue is abandoned when this task fails
 			}),
 		)
 		.optional(), // Remaining tasks for spawn_parallel_tasks fan-out
@@ -44,9 +45,11 @@ export const historyItemSchema = z.object({
 				taskId: z.string(),
 				summary: z.string(),
 				payload: z.record(z.unknown()).optional(),
+				error: z.string().optional(), // Set when the child task failed or was aborted
 			}),
 		)
 		.optional(), // Accumulated results from completed parallel children
+	abortOnChildFailure: z.boolean().optional(), // When true, the entire parallel queue is abandoned if any child fails
 })
 
 export type HistoryItem = z.infer<typeof historyItemSchema>

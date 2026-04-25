@@ -31,6 +31,7 @@ interface DelegationProvider {
 		childTaskId: string
 		completionResultSummary: string
 		completionPayload?: Record<string, unknown>
+		childFailed?: boolean
 	}): Promise<void>
 }
 

@@ -26,6 +26,9 @@ export interface TaskProviderLike {
 	clearTask(): Promise<void>
 	resumeTask(taskId: string): void
 
+	// Introspection
+	getParallelTaskStatus(taskId: string): Promise<ParallelTaskStatus | undefined>
+
 	// Modes
 	getModes(): Promise<{ slug: string; name: string }[]>
 	getMode(): Promise<string>
@@ -82,6 +85,21 @@ export type TaskProviderEvents = {
 
 	[RooCodeEventName.ModeChanged]: [mode: string]
 	[RooCodeEventName.ProviderProfileChanged]: [config: { name: string; provider?: string }]
+}
+
+/**
+ * ParallelTaskStatus — snapshot of a task's parallel-queue state for introspection.
+ */
+export interface ParallelTaskStatus {
+	taskId: string
+	historyStatus: "active" | "completed" | "delegated" | undefined
+	worktreePath: string | undefined
+	/** Remaining tasks waiting to run */
+	queuedTasks: Array<{ mode: string; message: string; worktree?: string }>
+	/** Results from children that have already completed */
+	completedResults: Array<{ taskId: string; summary: string; error?: string }>
+	/** Task ID of the child currently executing, if any */
+	activeChildId: string | undefined
 }
 
 /**

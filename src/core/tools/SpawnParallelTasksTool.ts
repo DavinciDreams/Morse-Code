@@ -16,13 +16,15 @@ interface ParallelTaskSpec {
 
 interface SpawnParallelTasksParams {
 	tasks: ParallelTaskSpec[]
+	/** When true, the entire queue is abandoned if any child task fails or is aborted. Default: false (continue on failure). */
+	abortOnChildFailure?: boolean
 }
 
 export class SpawnParallelTasksTool extends BaseTool<"spawn_parallel_tasks"> {
 	readonly name = "spawn_parallel_tasks" as const
 
 	async execute(params: SpawnParallelTasksParams, task: Task, callbacks: ToolCallbacks): Promise<void> {
-		const { tasks } = params
+		const { tasks, abortOnChildFailure = false } = params
 		const { askApproval, handleError, pushToolResult } = callbacks
 
 		try {
@@ -98,6 +100,7 @@ export class SpawnParallelTasksTool extends BaseTool<"spawn_parallel_tasks"> {
 				initialTodos: first.todoItems,
 				mode: first.spec.mode,
 				worktree: first.spec.worktree || undefined,
+				abortOnChildFailure,
 				parallelQueue: rest.map((t) => ({
 					mode: t.spec.mode,
 					message: t.spec.message,
