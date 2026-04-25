@@ -79,6 +79,7 @@ import { MdmService } from "../../services/mdm/MdmService"
 import { SkillsManager } from "../../services/skills/SkillsManager"
 import { TeamsManager } from "../../services/teams/TeamsManager"
 import { SwarmRegistry } from "../swarm/SwarmRegistry"
+import { MailboxManager } from "../swarm/MailboxManager"
 
 import { fileExistsAtPath } from "../../utils/fs"
 import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
@@ -156,6 +157,7 @@ export class ClineProvider
 	protected skillsManager?: SkillsManager
 	protected teamsManager?: TeamsManager
 	protected swarmRegistry: SwarmRegistry = new SwarmRegistry()
+	protected mailboxManager: MailboxManager = new MailboxManager()
 	private marketplaceManager: MarketplaceManager
 	private mdmService?: MdmService
 	private taskCreationCallback: (task: Task) => void
@@ -744,6 +746,7 @@ export class ClineProvider
 		this.skillsManager = undefined
 		this.teamsManager = undefined
 		this.swarmRegistry.dispose()
+		this.mailboxManager.dispose()
 		this.marketplaceManager?.cleanup()
 		this.customModesManager?.dispose()
 		this.taskHistoryStore.dispose()
@@ -3828,8 +3831,11 @@ export class ClineProvider
 		parentTaskId: string
 		tasks: Array<{ mode: string; message: string; worktree?: string; todos?: TodoItem[]; role?: string }>
 		abortOnChildFailure?: boolean
+		/** When true, workers enter an idle loop after each turn and await task_assignment
+		 *  or shutdown_request instead of completing immediately. */
+		persistent?: boolean
 	}): Promise<Array<{ taskId: string; summary: string; payload?: Record<string, unknown>; error?: string }>> {
-		const { parentTaskId, tasks, abortOnChildFailure = false } = params
+		const { parentTaskId, tasks, abortOnChildFailure = false, persistent = false } = params
 
 		const parent = this.tasks.get(parentTaskId)
 		if (!parent) {
@@ -3842,6 +3848,9 @@ export class ClineProvider
 		// Create a swarm session so every worker gets a stable identity + color.
 		const sessionId = parentTaskId
 		this.swarmRegistry.createSession(sessionId, parentTaskId)
+		if (persistent) {
+			this.mailboxManager.createMailbox(sessionId)
+		}
 		this.emit(RooCodeEventName.SwarmSessionStarted, sessionId, parentTaskId)
 
 		// Mark parent as swarm leader in its history item.
@@ -3984,10 +3993,27 @@ export class ClineProvider
 			`[spawnConcurrentChildren] All ${tasks.length} children completed for parent ${parentTaskId}. failures=${hadFailures}`,
 		)
 
+		if (persistent) {
+			this.mailboxManager.destroyMailbox(sessionId)
+		}
 		this.swarmRegistry.destroySession(sessionId)
 		this.emit(RooCodeEventName.SwarmSessionEnded, sessionId, parentTaskId)
 
 		return results
+	}
+
+	/** Assign a new task to an idle persistent worker. */
+	public async assignTaskToWorker(sessionId: string, workerId: string, message: string): Promise<void> {
+		await this.mailboxManager.assignTask(sessionId, workerId, message)
+	}
+
+	/** Send shutdown_request to all workers in a session so they resolve and the parent can collect results. */
+	public async shutdownWorkers(sessionId: string): Promise<void> {
+		const session = this.swarmRegistry.getSession(sessionId)
+		if (!session) return
+		await Promise.all(
+			Object.keys(session.teammates).map((workerId) => this.mailboxManager.shutdownWorker(sessionId, workerId)),
+		)
 	}
 
 	/**

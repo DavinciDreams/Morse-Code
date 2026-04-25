@@ -89,6 +89,8 @@ export type TaskProviderEvents = {
 	[RooCodeEventName.SwarmSessionStarted]: [sessionId: string, leaderTaskId: string]
 	[RooCodeEventName.SwarmSessionEnded]: [sessionId: string, leaderTaskId: string]
 	[RooCodeEventName.WorkerRegistered]: [sessionId: string, taskId: string, agentName: string, agentColor: string]
+	[RooCodeEventName.WorkerIdle]: [sessionId: string, taskId: string]
+	[RooCodeEventName.WorkerShutdown]: [sessionId: string, taskId: string]
 }
 
 /**
