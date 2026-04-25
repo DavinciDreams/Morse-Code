@@ -1,25 +1,27 @@
 # PRD: Swarm / True Multi-Agent Execution in Moo Code
 
-**Status:** Draft  
+**Status:** In progress — Phase 1 shipped; Teams system shipped  
 **Author:** davincidreams  
 **Branch:** `feat/swarm-prd`  
-**Created:** 2026-04-25
+**Created:** 2026-04-25  
+**Last updated:** 2026-04-25
 
 ---
 
 ## 1. Problem Statement
 
-Moo Code today runs tasks **strictly sequentially**. When `spawn_parallel_tasks` is used,
-children execute one at a time via a queued delegation chain (`parallelQueue` on `HistoryItem`).
-The root cause is the `clineStack: Task[]` LIFO invariant in `ClineProvider`, which enforces
-"only one task open at a time" and disposes the parent before the child starts.
+~~Moo Code today runs tasks **strictly sequentially**.~~ **Phase 1 shipped** — `clineStack` has
+been replaced with `tasks: Map<string, Task>` and true concurrent fan-out is available via
+`spawn_parallel_tasks` with `concurrent: true`. The remaining problem is the higher phases:
+agent identity, cross-agent communication, permission bridging, and external process backends.
 
-This means:
+The original problem for context:
 
-- A 4-task "parallel" job takes 4× the wall-clock time of the longest subtask.
-- Workers cannot communicate with each other or the leader while running.
-- There is no concept of idle workers waiting for the next task from a shared queue.
-- Spawning an agent in an isolated environment (separate process / window) is impossible.
+> When `spawn_parallel_tasks` was used, children executed one at a time via a queued delegation
+> chain (`parallelQueue` on `HistoryItem`). The root cause was the `clineStack: Task[]` LIFO
+> invariant in `ClineProvider`, which enforced "only one task open at a time" and disposed the
+> parent before the child started. A 4-task "parallel" job took 4× the wall-clock time of the
+> longest subtask.
 
 The goal of this PRD is to close the gap with claude-code's **swarm/teammate** architecture and
 deliver genuine multi-instance, multi-agent execution inside Moo Code.
@@ -443,16 +445,74 @@ idle transitions, and permission events in real time.
 
 ---
 
+## 7b. Teams System (Shipped)
+
+The Teams system provides a lightweight, config-driven multi-agent workflow layer that sits on
+top of the Phase 1 concurrent task map. It is inspired by the
+[Atlas-Agent-Teams](https://github.com/Logos-Liber/Atlas-Agent-Teams) CLI plugin.
+
+### How it works
+
+1. A team is defined in `.roo/teams/<slug>.json`. The file describes an ordered list of phases;
+   each phase runs one or more specialist agents (each in a Roo-Code mode).
+2. An orchestrator agent (any mode with `run_team_phase` available) reads the config with
+   `read_file`, then calls `run_team_phase` once per phase in order.
+3. The tool handles concurrent vs sequential dispatch, conventions injection, and template
+   interpolation — the orchestrator only needs to pass `task` and accumulated `context`.
+
+### Key components
+
+| File                                                    | Role                                                  |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| `packages/types/src/team.ts`                            | `TeamConfig`, `TeamPhase`, `TeamAgentSpec` interfaces |
+| `src/services/teams/TeamsManager.ts`                    | Scans `.roo/teams/*.json`; caches configs by slug     |
+| `src/core/tools/RunTeamPhaseTool.ts`                    | Tool implementation                                   |
+| `src/core/prompts/tools/native-tools/run_team_phase.ts` | LLM tool schema                                       |
+| `.roo/teams/fullstack.json`                             | Sample 3-phase full-stack team                        |
+
+### Config format (summary)
+
+```json
+{
+	"slug": "my-team",
+	"name": "My Team",
+	"orchestratorMode": "orchestrator",
+	"conventions": ".roo/teams/conventions/my-team.md",
+	"phases": [
+		{
+			"name": "discovery",
+			"concurrent": true,
+			"requireApproval": true,
+			"agents": [
+				{
+					"mode": "architect",
+					"role": "Backend Architect",
+					"instruction": "Analyze backend requirements for: {{task}}\n\nPrior context: {{context}}"
+				}
+			]
+		}
+	]
+}
+```
+
+Template variables available in `instruction` and `worktree` fields: `{{task}}`, `{{context}}`,
+`{{phase}}`, `{{team}}`.
+
+See [`docs/teams.md`](./teams.md) for the full reference.
+
+---
+
 ## 8. Phased Delivery
 
-| Phase | Name                | Key deliverables                                                                                                   | Estimated effort  |
-| ----- | ------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------- |
-| P1    | Concurrent task map | Replace `clineStack` with `tasks: Map`; remove single-open invariant; `concurrent: true` on `spawn_parallel_tasks` | Large (1–2 weeks) |
-| P2    | Swarm identity      | `SwarmRegistry`, `AgentIdentity`, color assignment; UI color dots                                                  | Medium (3–5 days) |
-| P3    | In-process mailbox  | `InMemoryMailbox`, idle loop in `Task`, `idle_notification` / `task_assignment` messages                           | Medium (3–5 days) |
-| P4    | Permission bridge   | `LeaderPermissionBridge`, worker badge in tool-ask UI                                                              | Medium (3–5 days) |
-| P5    | File mailbox        | `FileMailbox` with lockfile; cross-process swarm works                                                             | Small (2–3 days)  |
-| P6    | External backends   | `CliWorkerBackend`; `moo-worker` entry point; `spawn_swarm` tool                                                   | Large (1–2 weeks) |
+| Phase | Name                | Key deliverables                                                                                                       | Status      | Estimated effort  |
+| ----- | ------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------- |
+| P1    | Concurrent task map | Replace `clineStack` with `tasks: Map`; remove single-open invariant; `concurrent: true` on `spawn_parallel_tasks`     | **Shipped** | Large (1–2 weeks) |
+| PT    | Teams system        | `run_team_phase` tool; `TeamsManager`; `.roo/teams/*.json` config format; conventions injection; `abortOnChildFailure` | **Shipped** | Medium (2–3 days) |
+| P2    | Swarm identity      | `SwarmRegistry`, `AgentIdentity`, color assignment; UI color dots                                                      | Planned     | Medium (3–5 days) |
+| P3    | In-process mailbox  | `InMemoryMailbox`, idle loop in `Task`, `idle_notification` / `task_assignment` messages                               | Planned     | Medium (3–5 days) |
+| P4    | Permission bridge   | `LeaderPermissionBridge`, worker badge in tool-ask UI                                                                  | Planned     | Medium (3–5 days) |
+| P5    | File mailbox        | `FileMailbox` with lockfile; cross-process swarm works                                                                 | Planned     | Small (2–3 days)  |
+| P6    | External backends   | `CliWorkerBackend`; `moo-worker` entry point; `spawn_swarm` tool                                                       | Planned     | Large (1–2 weeks) |
 
 ---
 
