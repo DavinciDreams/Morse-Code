@@ -2,7 +2,7 @@ import { serializeError } from "serialize-error"
 import { Anthropic } from "@anthropic-ai/sdk"
 
 import type { ToolName, ClineAsk, ToolProgressStatus } from "@roo-code/types"
-import { ConsecutiveMistakeError, TelemetryEventName, RooCodeEventName } from "@roo-code/types"
+import { ConsecutiveMistakeError, TelemetryEventName } from "@roo-code/types"
 import { submitWorkerPermissionRequest } from "../swarm/LeaderPermissionBridge"
 import { TelemetryService } from "@roo-code/telemetry"
 import { customToolRegistry } from "@roo-code/core"
@@ -511,9 +511,7 @@ export async function presentAssistantMessage(cline: Task) {
 					type PermissionProvider = {
 						getTaskById?: (id: string) => unknown
 						swarmRegistry?: {
-							getSessionForTask(
-								taskId: string,
-							):
+							getSessionForTask(taskId: string):
 								| {
 										sessionId: string
 										teammates: Record<
