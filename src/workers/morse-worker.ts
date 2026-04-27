@@ -22,14 +22,15 @@
  * depends on vscode-shim and many VS Code API shims that are only safe to
  * initialise once per process. Running it directly inside this worker would
  * also require bundling the entire CLI into the extension. Instead, this
- * worker spawns the Morse CLI binary (`roo`) as a child process per task,
+ * worker spawns the Morse CLI binary (`morse`) as a child process per task,
  * passing the workspace, mode, model, and task message as flags. stdout/stderr
  * from the CLI child are captured and the exit code determines success/failure.
  * The collected output becomes the task summary returned to the leader.
  *
  * The CLI binary is resolved as:
  *   1. The `ROO_CLI_BIN` environment variable (useful for test overrides).
- *   2. `roo` on PATH (standard installation via `npm install -g morse-code`).
+ *   2. `morse` on PATH (standard installation via `npm install -g morse-code`).
+ *   3. `roo` is also available as a legacy alias for backwards compatibility.
  */
 
 import path from "path"
@@ -78,7 +79,7 @@ const { FileMailbox } = require(path.resolve(__dirname, "..", "core", "swarm", "
 // ---------------------------------------------------------------------------
 
 async function executeTaskViaCli(taskMessage: string): Promise<string> {
-	const cliBin = process.env.ROO_CLI_BIN ?? "roo"
+	const cliBin = process.env.ROO_CLI_BIN ?? "morse"
 
 	// Flags reference: apps/cli/src/index.ts
 	// --print   = non-interactive, print response and exit
